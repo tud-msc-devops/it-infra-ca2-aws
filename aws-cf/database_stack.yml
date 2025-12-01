@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Database Stack - RDS MySQL with Multi-AZ'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: it-infra-ca2
+
+  DBInstanceClass:
+    Description: Database instance class
+    Type: String
+    Default: db.t3.medium
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+      - db.t3.large
+      - db.r5.large
+      - db.r5.xlarge
+
+  DBName:
+    Description: Database name
+    Type: String
+    Default: applicationdb
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+
+  DBUsername:
+    Description: Database master username
+    Type: String
+    Default: admin
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    NoEcho: true
+
+  DBPassword:
+    Description: Database master password
+    Type: String
+    MinLength: 8
+    MaxLength: 41
+    AllowedPattern: '[a-zA-Z0-9]*'
+    NoEcho: true
+
+  DBAllocatedStorage:
+    Description: Allocated storage in GB
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 1000
+
+  DBBackupRetentionPeriod:
+    Description: Number of days to retain automated backups
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 35
+
+Resources:
+  # DB Subnet Group
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub ${EnvironmentName}-db-subnet-group
+      DBSubnetGroupDescription: Subnet group for RDS instances
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PrivateSubnet1-ID
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PrivateSubnet2-ID
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DB-Subnet-Group
+
+  # DB Security Group
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-db-sg
+      GroupDescription: Security group for RDS instances
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPC-ID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppServerSecurityGroup
+          Description: MySQL access from application servers
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DB-SecurityGroup
+
+  # Application Server Security Group (for reference)
+  AppServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-app-server-sg-db-ref
+      GroupDescription: Security group for application servers (DB stack reference)
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPC-ID
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-AppServer-SecurityGroup-DB-Ref
+
+  # RDS Instance (Multi-AZ enabled)
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub ${EnvironmentName}-mysql-db
+      DBName: !Ref DBName
+      Engine: mysql
+      EngineVersion: 8.0.37
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      MultiAZ: true
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      BackupRetentionPeriod: !Ref DBBackupRetentionPeriod
+      PreferredBackupWindow: '03:00-04:00'
+      PreferredMaintenanceWindow: 'sun:04:00-sun:05:00'
+      EnableCloudwatchLogsExports:
+        - error
+        - general
+        - slowquery
+      AutoMinorVersionUpgrade: true
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-MySQL-Primary
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+Outputs:
+  RDSInstanceEndpoint:
+    Description: RDS instance endpoint
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${EnvironmentName}-RDS-Endpoint
+
+  RDSInstancePort:
+    Description: RDS instance port
+    Value: !GetAtt RDSInstance.Endpoint.Port
+    Export:
+      Name: !Sub ${EnvironmentName}-RDS-Port
+
+  DBSecurityGroupId:
+    Description: Database Security Group ID
+    Value: !Ref DBSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-DB-SecurityGroup-ID
+
+  AppServerSecurityGroupId:
+    Description: Application Server Security Group ID (for DB access)
+    Value: !Ref AppServerSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-AppServer-SecurityGroup-ID
+
+  DBName:
+    Description: Database name
+    Value: !Ref DBName
+    Export:
+      Name: !Sub ${EnvironmentName}-DB-Name
