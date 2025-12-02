@@ -2,7 +2,7 @@
 
 aws cloudformation deploy --stack-name network-stack --template-file network_stack.yml --capabilities CAPABILITY_NAMED_IAM
 
-aws cloudformation deploy --stack-name database-stack --template-file database_stack.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  PrivateSubnet1="subnet-083716bdbbe41252f" PrivateSubnet2="subnet-04eadcc626be259b7" DBPassword="it_infra123"
+aws cloudformation deploy --stack-name database-stack --template-file database_stack.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  PrivateSubnet1="subnet-083716bdbbe41252f" PrivateSubnet2="subnet-04eadcc626be259b7" DBPassword="itinfra123"
 
 aws cloudformation deploy --stack-name application-stack --template-file application_stack.yml --parameter-overrides KeyName="MyKeyPair" --capabilities CAPABILITY_NAMED_IAM
 
